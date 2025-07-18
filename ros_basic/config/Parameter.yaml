@@ -1,0 +1,4 @@
+simple_service_client:
+  ros__parameters:
+    distance_odom: 5.0
+    distance_lidar: 1.0
