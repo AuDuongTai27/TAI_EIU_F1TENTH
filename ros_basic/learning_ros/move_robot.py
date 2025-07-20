@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
 
         self.stopButton.clicked.connect(self.stop_clicked)
 
-        self.StopIn.clicked.connect(self.dimaymet)
+        self.StopIn.clicked.connect(self.move_expected_distance)
 
         # self.rosthread = ROS2Thread()
 
@@ -67,11 +67,11 @@ class MainWindow(QMainWindow):
         self.dOdom.setText(f"{d:.2f}")
 
 
-    def dimaymet(self):
+    def move_expected_distance(self):
         self.StopIn.setStyleSheet("background-color: #FFEB3B;")
 
-        j_value = self.LineEdit.value()  # Lấy giá trị float từ QDoubleSpinBox
-        self.move_move.start_stop(j_value)
+        expected_distance = self.LineEdit.value()  # Lấy giá trị float từ QDoubleSpinBox
+        self.move_move.start_stop(expected_distance)
     
     def reset_button_color(self):
         self.StopIn.setStyleSheet("")  # 👈 Đổi về màu mặc định
@@ -84,7 +84,7 @@ class Move_robot(Node):
         self.publisherDrive = self.create_publisher(AckermannDriveStamped, 'drive', 10)
         self.subOdom = self.create_subscription(Odometry, 'odom', self.listenOdom, 10)
         self.subScan = self.create_subscription(LaserScan,'scan',self.listenScan,10)
-        self.j=0.0
+        self.expected_distance = 0.0
         self.timer = None
         self.timer2 = None
         self.initialize = None
@@ -99,16 +99,15 @@ class Move_robot(Node):
         self.obstacle_detected = False
 
         
-        # self.j=0.0
     def start_moving(self):
             if self.timer is None:
                     self.timer = self.create_timer(0.001, self.timer_callback)
-    def start_stop(self,test):
+    def start_stop(self,expected_distance):
         print("📡 start_stop called")
-        self.j=test
+        self.expected_distance=expected_distance
         self.iniDistance=None
         if self.timer2 is None:
-            self.timer2 = self.create_timer(0.001, self.maymet)
+            self.timer2 = self.create_timer(0.001, self.stop_in_expected_distance)
 
     def stop_moving(self):
         if self.timer is not None:
@@ -153,17 +152,7 @@ class Move_robot(Node):
                     self.obstacle_detected = False
 
 
-        # index_0 = int((0.0 - scan.angle_min) / scan.angle_increment) ##tìm tia mà tại đó tượng trưng cho góc 0 độ
-        # if 0 <= index_0 < len(scan.ranges):
-        #     distance1 = scan.ranges[index_0]
-        #     if 0.01 < distance1 <= 2.0:
-        #         if not self.obstacle_detected:
-        #             print(f"🚫 Vật cản phía trước ({distance1:.2f}m)! Dừng xe.")
-        #         self.obstacle_detected = True
-        #     else:
-        #         if self.obstacle_detected:
-        #             print("✅ Hết vật cản. Cho phép tiếp tục.")
-        #         self.obstacle_detected = False
+
                     
 
     def listenOdom(self, msg:Odometry):
@@ -174,39 +163,23 @@ class Move_robot(Node):
         self.currentPose = [self.current_x, self.current_y]
         self.distance = float(sp.sqrt((self.current_x - self.initialize[0])**2 + (self.current_y - self.initialize[1])**2))
         self.odom_signal1.emit(self.current_x, self.current_y, self.distance)
-        
-    def maymet(self):        
-        if self.iniDistance ==None:
+
+    def stop_in_expected_distance(self):
+        if self.iniDistance is None:
             self.iniDistance = self.distance
-        distance2=self.distance-self.iniDistance
-        # self.j=float(j)
-        if (distance2>self.j):
+        distance2 = self.distance - self.iniDistance
+        print(f"Distance: {distance2:.2f} m, Expected: {self.expected_distance:.2f} m")
+        if (distance2 > self.expected_distance):
             if self.timer2 is not None:
                 self.timer2.cancel()
                 self.timer2 = None
                 self.timer.cancel()
-                self.timer=None
+                self.timer = None
                 stop_msg = AckermannDriveStamped()
                 stop_msg.drive.speed = 0.0
                 self.publisherDrive.publish(stop_msg)
                 self.robot_stopped.emit() 
         
-        
-        
-
-# def signal_handler(sig, frame):
-#     print("Ctrl+C detected. Stopping robot.")
-#     stop_msg = AckermannDriveStamped()
-#     stop_msg.drive.speed = 0.0
-#     if node is not None:
-#         node.publisher_.publish(stop_msg)
-#         time.sleep(0.1)
-#         node.destroy_node()
-#     rclpy.shutdown()
-#     sys.exit(0)
-
-##signal.signal(signal.SIGINT, signal_handler)
-
 def main():
     rclpy.init()
     app = QApplication(sys.argv)
