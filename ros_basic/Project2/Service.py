@@ -8,7 +8,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 import math
 import time
-from rosbasic_msgs.srv import BaiTap1Danh
+from rosbasic_msgs.srv import BaiTap2
 
 class SimpleServiceServer(Node):
     def __init__(self):
@@ -16,7 +16,7 @@ class SimpleServiceServer(Node):
         self.group = ReentrantCallbackGroup()
 
         # Khai báo Service, Publisher, Subscriber với callback group
-        self.service_ = self.create_service(BaiTap1Danh, "BaiTap", self.serviceCallback, callback_group=self.group)
+        self.service_ = self.create_service(BaiTap2, "BaiTap", self.serviceCallback, callback_group=self.group)
         self.publisher_ = self.create_publisher(AckermannDriveStamped, "/drive", 10, callback_group=self.group)
         self.sub_odom = self.create_subscription(Odometry, "/odom", self.lisener, 10, callback_group=self.group)
         self.sub_lidar = self.create_subscription(LaserScan, "/scan", self.scan_callback, 10, callback_group=self.group)
@@ -78,7 +78,7 @@ class SimpleServiceServer(Node):
         response.result = True
         
         response.message =  f"Đã đi đủ {request.distance_odom}m"
-        print(f"{request.distance_lidar} okkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk ")
+        print(f"{request.distance_lidar} ")
         return response
 
     def scan_callback(self, scan_msg):
