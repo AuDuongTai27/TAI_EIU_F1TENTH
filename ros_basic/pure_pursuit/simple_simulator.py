@@ -23,7 +23,7 @@ class SimpleSimulator(Node):
         
         # Vật cản (Mặc định ở vô cực)
         self.obstacle_pos = None 
-        self.obstacle_radius = 0.5 
+        self.obstacle_radius = 0.2
 
         # --- Pub/Sub ---
         self.create_subscription(AckermannDriveStamped, '/drive', self.drive_callback, 10)

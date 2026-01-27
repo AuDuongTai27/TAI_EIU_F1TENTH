@@ -19,7 +19,7 @@ class ReactivePlanner(Node):
         self.declare_parameter("waypoint_path", "/home/adt/ros2_ws/install/waypoint/share/waypoint/f1tenth_waypoint_generator/racelines/f1tenth_waypoint.csv")
         self.csv_path = self.get_parameter("waypoint_path").value
         
-        # Các thông số Planner
+        # Các thông số Plannerth
         self.lookahead_dist = 1.5       # Khoảng cách nhìn xa để tạo đường cong
         self.nudge_width = 0.5          # Khoảng cách giữa các đường sinh ra (m)
         self.num_paths = 7              # Số lượng đường sinh ra (Lẻ: 1 giữa, còn lại chia đều 2 bên)

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from rclpy.duration import Duration # <--- Cần thêm thư viện này cho Duration
+from rclpy.duration import Duration
 import numpy as np
 import math
 import csv
 import os
+import time  # <--- MỚI: Dùng để tính giờ
+from datetime import datetime # <--- MỚI: Để đặt tên file log
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
@@ -25,7 +27,6 @@ class PurePursuitReal(Node):
         self.declare_parameter("max_speed", 1.0)
         self.declare_parameter("wheelbase", 0.39)
         self.declare_parameter("steering_limit", 0.35)
-        
         self.declare_parameter("map_frame", "map")
         self.declare_parameter("base_frame", "base_link")
 
@@ -35,7 +36,7 @@ class PurePursuitReal(Node):
         self.wheelbase = self.get_parameter("wheelbase").value
         self.steering_limit = self.get_parameter("steering_limit").value
         self.map_frame = self.get_parameter("map_frame").value
-        self.base_frame = self.get_parameter("base_frame").value # Lưu ý biến này
+        self.base_frame = self.get_parameter("base_frame").value
 
         # ==========================================
         # 2. INIT
@@ -48,13 +49,28 @@ class PurePursuitReal(Node):
         
         self.drive_pub = self.create_publisher(AckermannDriveStamped, '/drive', 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/visualization/markers', 10)
-        
         self.create_subscription(Odometry, '/odom', self.control_loop, 10) 
         
         self.publish_static_path()
-        self.get_logger().info(f"REAL CAR READY. Wheelbase: {self.wheelbase}, Speed: {self.max_speed}")
 
-    # ... (Các hàm load_waypoints, remove_overlapped_waypoints giữ nguyên) ...
+        # --- [MỚI] SETUP LOGGER & HZ COUNTER ---
+        # 1. Setup đo Hz
+        self.loop_count = 0
+        self.last_print_time = time.time()
+        
+        # 2. Setup ghi file CSV (Lưu vào thư mục Home)
+        home_dir = os.path.expanduser('~')
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.log_filename = os.path.join(home_dir, f"f1tenth_log_{timestamp}.csv")
+        
+        self.log_file = open(self.log_filename, 'w', newline='')
+        self.writer = csv.writer(self.log_file)
+        # Ghi header cho file CSV
+        self.writer.writerow(["time", "cte", "steering_angle", "speed", "x", "y"])
+        self.start_time = time.time()
+        
+        self.get_logger().info(f"REAL CAR READY. Logging to: {self.log_filename}")
+
     def load_waypoints(self, file_path):
         points = []
         if os.path.exists(file_path):
@@ -80,60 +96,61 @@ class PurePursuitReal(Node):
     def distance_between_2points(self, x1, y1, x2, y2):
         return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
-    # =========================================================
-    # ĐÂY LÀ CHỖ BẠN CẦN THAY THẾ (HÀM control_loop)
-    # =========================================================
+    # ================= CORE LOOP =================
     def control_loop(self, msg):
         if len(self.waypoints) == 0: return
 
-        # --- BƯỚC 1: LẤY VỊ TRÍ (Đã thay đoạn code của bạn vào đây) ---
+        # --- [MỚI] TÍNH HZ ---
+        self.loop_count += 1
+        now = time.time()
+        if now - self.last_print_time >= 1.0: # Mỗi 1 giây in 1 lần
+            hz = self.loop_count / (now - self.last_print_time)
+            self.get_logger().info(f"Loop Rate: {hz:.2f} Hz") # <--- Lấy số này điền vào báo cáo
+            self.loop_count = 0
+            self.last_print_time = now
+
+        # --- BƯỚC 1: TF LOOKUP ---
         try:
-            # Hỏi TF: "Base_link đang ở đâu trên Map?"
             transform = self.tf_buffer.lookup_transform(
                 self.map_frame, 
-                self.base_frame,  # Dùng self.base_frame cho đồng bộ với __init__
-                rclpy.time.Time(), # Lấy thời gian mới nhất
-                # Duration(seconds=0.1) # Có thể thêm timeout nếu muốn
+                self.base_frame, 
+                rclpy.time.Time()
             )
-            
-            # 1. Lấy tọa độ X, Y
             car_x = transform.transform.translation.x
             car_y = transform.transform.translation.y
-
-            # 2. QUAN TRỌNG: Phải tính Yaw (Góc lái) thì Pure Pursuit mới chạy được
+            
             q = transform.transform.rotation
             siny_cosp = 2 * (q.w * q.z + q.x * q.y)
             cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
             car_yaw = math.atan2(siny_cosp, cosy_cosp)
-
-            # 3. Gọi hàm hiển thị riêng của bạn (nếu có)
-            self.publish_vi_tri_hien_tai(car_x, car_y)
-            self.publish_ten_xe(car_x, car_y)
             
         except TransformException as e:
-            # Nếu chưa có TF map->base_link thì return luôn
             return
 
-        # --- BƯỚC 2: THUẬT TOÁN PURE PURSUIT ---
+        # --- BƯỚC 2: PURE PURSUIT ---
         target_point = self.get_target_point(car_x, car_y)
         steering_angle = self.calculate_steering(target_point, car_x, car_y, car_yaw)
         
-        # --- BƯỚC 3: GỬI LỆNH ---
-        self.publish_drive(steering_angle)
-        
-        # --- BƯỚC 4: VISUALIZATION ---
+        # --- BƯỚC 3: ACTUATION & LOGGING ---
+        # Tính tốc độ thực tế gửi đi (để log cho đúng)
+        final_speed = self.max_speed
+        safe_angle = max(min(steering_angle, self.steering_limit), -self.steering_limit)
+        if abs(safe_angle) > 0.17: 
+            final_speed *= 1.0
+
+        self.publish_drive(safe_angle, final_speed)
         self.publish_dynamic_markers(target_point, car_x, car_y)
 
-    # --- CÁC HÀM BỔ SUNG (Placeholder để không lỗi) ---
-    def publish_vi_tri_hien_tai(self, x, y):
-        # Bạn viết code publish text marker hoặc log ở đây
-        pass 
+        # --- [MỚI] TÍNH TOÁN DỮ LIỆU ĐỂ LOG ---
+        # 1. Tính CTE (Cross Track Error): Khoảng cách từ xe đến waypoint gần nhất
+        # self.last_idx đã được cập nhật trong hàm get_target_point
+        nearest_wp = self.waypoints[self.last_idx]
+        current_cte = math.dist([car_x, car_y], nearest_wp)
+        
+        # 2. Ghi vào file
+        log_time = time.time() - self.start_time
+        self.writer.writerow([f"{log_time:.3f}", f"{current_cte:.4f}", f"{safe_angle:.3f}", f"{final_speed:.2f}", f"{car_x:.3f}", f"{car_y:.3f}"])
 
-    def publish_ten_xe(self, x, y):
-        # Bạn viết code publish tên xe ở đây
-        pass
-
-    # ... (Các hàm get_target_point, calculate_steering, publish_drive, visualization giữ nguyên) ...
     def get_target_point(self, car_x, car_y):
         num_pts = len(self.waypoints)
         search_len = 50 
@@ -158,16 +175,14 @@ class PurePursuitReal(Node):
         lookahead_dist = math.dist([car_x, car_y], target)
         return math.atan((2 * self.wheelbase * target_y_local) / (lookahead_dist**2))
 
-    def publish_drive(self, angle):
-        speed = self.max_speed
-        angle = max(min(angle, self.steering_limit), -self.steering_limit)
-        if abs(angle) > 0.17: 
-            speed *= 1.0  
+    # Đã sửa hàm này để nhận tham số speed và angle đã xử lý
+    def publish_drive(self, angle, speed):
         msg = AckermannDriveStamped()
         msg.drive.speed = float(speed)  
         msg.drive.steering_angle = float(angle)
         self.drive_pub.publish(msg)
 
+    # ... (Các hàm create_marker, publish_static_path... giữ nguyên) ...
     def create_marker(self, id, x, y, r, g, b, scale=0.3, type=Marker.SPHERE):
         m = Marker()
         m.header.frame_id = "map"
@@ -193,6 +208,11 @@ class PurePursuitReal(Node):
         marker_array.markers.append(self.create_marker(1, car_x, car_y, 0.0, 0.0, 1.0))
         self.marker_pub.publish(marker_array)
     
+    # [MỚI] Hàm dọn dẹp khi tắt node
+    def destroy_node(self):
+        self.log_file.close()
+        self.get_logger().info("Log file closed.")
+        super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)

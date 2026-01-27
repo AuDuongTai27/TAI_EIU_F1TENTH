@@ -45,6 +45,7 @@ install(PROGRAMS
   pure_pursuit/controller_simulation.py
   pure_pursuit/simple_simulator.py
   pure_pursuit/reactive_planner_node.py
+  pure_pursuit/chay_lay_so_lieu.py
 
   
   
