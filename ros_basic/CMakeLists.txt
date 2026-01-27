@@ -47,7 +47,10 @@ install(PROGRAMS
   pure_pursuit/reactive_planner_node.py
   pure_pursuit/chay_lay_so_lieu.py
 
-  
+  rrt/rrt.py
+  rrt/treeViz.py
+  rrt/code_chay_reak.py
+  rrt/utils.py
   
 
   DESTINATION lib/${PROJECT_NAME})  
