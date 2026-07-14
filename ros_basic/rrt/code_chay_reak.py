@@ -29,7 +29,7 @@ class ContinuousLocalPlanner(Node):
         # ==========================================
         self.declare_parameter("waypoint_path", "/home/adt/ros2_ws/install/waypoint/share/waypoint/f1tenth_waypoint_generator/racelines/f1tenth_waypoint.csv")
         self.declare_parameter("lookahead_global", 2.0) 
-        self.declare_parameter("max_speed", 2.4)
+        self.declare_parameter("max_speed", 1.0)
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("drive_topic", "/drive")
         self.declare_parameter("map_frame", "map")

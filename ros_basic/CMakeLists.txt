@@ -38,6 +38,11 @@ install(PROGRAMS
   Project2/Client.py
   Project2/Service.py
   learning_ros/rv.py
+  learning_ros/lidar_to_excel.py
+  learning_ros/depth_lidar_capture.py
+  learning_ros/depth_lidar_single.py
+learning_ros/odom_drive_log.py
+learning_ros/servo_steer_log.py
 
   Review_December/review1.py
 
