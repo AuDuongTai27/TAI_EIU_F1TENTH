@@ -43,6 +43,10 @@ install(PROGRAMS
   learning_ros/depth_lidar_single.py
 learning_ros/odom_drive_log.py
 learning_ros/servo_steer_log.py
+  learning_ros/data_collection.py
+  learning_ros/dagger_inference.py
+  learning_ros/train.py
+
 
   Review_December/review1.py
 

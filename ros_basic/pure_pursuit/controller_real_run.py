@@ -21,7 +21,7 @@ class PurePursuitReal(Node):
         # 1. PARAMETERS
         # ==========================================
         self.declare_parameter("waypoint_path", "/home/adt/ros2_ws/install/waypoint/share/waypoint/f1tenth_waypoint_generator/racelines/f1tenth_waypoint.csv")
-        self.declare_parameter("lookahead_dist", 0.8)
+        self.declare_parameter("lookahead_dist", 0.5)
         self.declare_parameter("max_speed", 1.0)
         self.declare_parameter("wheelbase", 0.39)
         self.declare_parameter("steering_limit", 0.35)
